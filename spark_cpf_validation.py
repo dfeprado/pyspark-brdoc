@@ -1,4 +1,5 @@
 from pyspark.sql import DataFrame, functions as sqlfn, Window, Column
+from typing import Tuple
 
 
 class CPFValidator:
@@ -33,24 +34,40 @@ class CPFValidator:
         self.__outputColName = outputColName
 
     def validate(self, df: DataFrame) -> DataFrame:
+        invalidDocsDf, workingDf = self.__preValidate(df)
+        if workingDf.count() == 0:
+            return df.withColumn(self.__outputColName, sqlfn.lit(False))
+
+        computedDigverDf = self.__computeDigVer(workingDf)
+
+        # Retorna os documentos com o status de validação.
+        return (
+            workingDf.join(computedDigverDf, [self.__docColName], "inner")
+            .select(*df.columns, self.__outputColName)
+            .union(invalidDocsDf.select(self.__docColName, sqlfn.lit(False)))
+        )
+
+    def __preValidate(self, df: DataFrame) -> Tuple[DataFrame, DataFrame]:
         invalidDocsDf = df.filter(
             (df[self.__docColName].isin(CPFValidator._KNOWN_INVALID_DOCS))
             | (~df[self.__docColName].rlike(r"^[0-9]{11}$"))
         )
 
+        return invalidDocsDf, df.exceptAll(invalidDocsDf)
+
+    def __computeDigVer(self, df: DataFrame) -> DataFrame:
         def fixComputedDigit(colName: str) -> Column:
             col = sqlfn.col(colName)
             return sqlfn.when(col != 10, col).otherwise(0)
 
-        computedDigverDf = (
+        return (
             # Quebra o CPF em 3 partes:
             #   1. CPF completo
             #   2. Raíz (dígitos de índices 1-8), em um array
             #   3. Dígitos verificadores (digver; dígitos de índices 10-12).
             #
             # Cada dígito da raíz estará na sua própria linha.
-            df.exceptAll(invalidDocsDf)
-            .select(
+            df.select(
                 self.__docColName,
                 sqlfn.explode(
                     sqlfn.split(df[self.__docColName].substr(1, 9), "", 9)
@@ -132,13 +149,12 @@ class CPFValidator:
                     CPFValidator.__Col.COMPUTED_DIG_2,
                 ),
             )
+            .withColumn(
+                self.__outputColName,
+                (
+                    sqlfn.col(CPFValidator.__Col.VERIFICATION_DIGITS)
+                    == sqlfn.col(CPFValidator.__Col.COMPUTED_VERIFICATION_DIGITS)
+                ),
+            )
+            .select(*df.columns, self.__outputColName)
         )
-
-        # Retorna os documentos com o status de validação.
-        return computedDigverDf.select(
-            self.__docColName,
-            (
-                computedDigverDf[CPFValidator.__Col.VERIFICATION_DIGITS]
-                == computedDigverDf[CPFValidator.__Col.COMPUTED_VERIFICATION_DIGITS]
-            ).alias(self.__outputColName),
-        ).union(invalidDocsDf.select(self.__docColName, sqlfn.lit(False)))
