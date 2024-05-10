@@ -27,10 +27,14 @@ def validateCNPJ(doc: str) -> bool:
 
     Returns:
         `True` se o documento for válido, `False` caso contrário. Um documento
+        pode ser considerado inválido pelos seguintes motivos:
         inválido é aquele que:
-         - É nulo; ou
-         - não é uma string; ou
-         - não tem 14"""
+         - É nulo
+         - Não é string
+         - Não tem 14 caracteres
+         - Tem algo além de números
+         - É um documento conhecidamente inváido (com todos os dígitos 0, por exemplo.)
+    """
 
     global __KNOWN_INVALID_DOCS
     global __NON_DIGIT_CHARS_PATTERN

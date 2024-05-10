@@ -20,10 +20,20 @@ __NON_DIGIT_CHAR_PATTERN = re.compile(r"[^0-9]+")
 
 @udf(returnType=BooleanType())
 def validateCPF(doc: str) -> bool:
-    """
-    Valida se um CPF Ã© vÃ¡lido conforme as regras da Receita Federal.
+    """Valida um CNPJ.
 
-    O argumento `cpf` tem que ser uma string apenas de dÃ­gitos e de tamanho 11.
+    Args:
+        doc (str): O documento a ser validado.
+
+    Returns:
+        `True` se o documento for válido, `False` caso contrário.
+        Um documento pode ser inválido pelos seguintes motivos:
+
+         - É nulo
+         - Não é uma string
+         - Não tem 11 caracters
+         - Tem algo além de números
+         - É um documento conhecidamente inválido (todos os dígitos 0, por exemplo.)
     """
     global __KNOWN_INVALID_DOCS
     global __NON_DIGIT_CHAR_PATTERN
